@@ -18,6 +18,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.app.Activity;
 import android.content.Intent;
+import android.util.Log;
 
 import java.text.DateFormat;
 import java.util.Calendar;
@@ -33,14 +34,16 @@ import ru.unn.caminlab.R;
 public class MainActivity extends AppCompatActivity {
 
     //-----------------------------------------Переменные-------------------------------------------------
-    public BluetoothAdapter bluetooth_adapter;
-    public TextView log_screen;
-    public TextView log_screen2;
-    public Button on_button;
-    public TextView temp_screen;
-    public BluetoothDevice Camin;
-    private BluetoothSocket socket;
+    public  BluetoothAdapter bluetooth_adapter;
+    public  BluetoothDevice Camin;
+    private BluetoothSocket socket = null;
+
+    public  Button on_button;
+    public  TextView temp_screen;
     private NewThread IO_Tread;
+    private RequestThread R_Thread;
+
+
 
     final int ArduinoMessage = 1;
 
@@ -49,12 +52,14 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_ENABLE_BT = 0;
     private boolean Is_Bluetooth_Enabled = false;
+    private boolean ThreadQuit = false;
 
     public boolean IsTemp = false;
     public boolean IsCommand = false;
+    public boolean IsConnect = false;
     public char degree = 176;
 
-
+    final String LogPrefix = "****CaminLab**** ";
     private static String MacAdress = "20:16:01:06:43:24";
     private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
@@ -71,30 +76,33 @@ public class MainActivity extends AppCompatActivity {
         //-----------------------------------/default--------------------------------
 
         bluetooth_adapter = BluetoothAdapter.getDefaultAdapter();
-        log_screen = (TextView) findViewById(R.id.Log_Screen);
-        log_screen2 = (TextView) findViewById(R.id.Log_Screen2);
         on_button = (Button) findViewById(R.id.On_Button);
         temp_screen = (TextView) findViewById(R.id.Temp_Out);
 
         if (!bluetooth_adapter.isEnabled())
         {
+            Log.d(LogPrefix, "Bluetooth выключен, запрос на включение");
             Intent bluetooth_enabler = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(bluetooth_enabler, REQUEST_ENABLE_BT);
             Is_Bluetooth_Enabled = true;
         }
+        else
+        {
+            Log.d(LogPrefix, "Bluetooth включен изначально");
+            Is_Bluetooth_Enabled = true;
+        }
+
 
         on_button.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v)
-            {
-                SetLogText(GetTime() + "Кнопка нажата ");
-                if (MacAdress != "00:00:00:00:00:00")
-                {
+            public void onClick(View v) {
+                Log.d(LogPrefix, "Кнопка ВКЛ нажата");
+                if (MacAdress != "00:00:00:00:00:00") {
+                    Log.d(LogPrefix, "Попытаемся отправить команду 1");
                     IO_Tread.Bluetooth_send("1");
-                    SetLogText(GetTime() + "Отправлены данные: 1");
-                }
-                else
-                    SetLogText(GetTime() + "Данные не отправлены");
+                    Log.d(LogPrefix, "Отправлены данные : 1");
+                } else
+                    Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
             }
         });
 
@@ -108,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
                         byte[] readBuf = (byte[]) _message.obj;
                         String strIncom = new String(readBuf, 0, _message.arg1);
                         CommandParcer(strIncom);
-                        SetLogText("Данные от Arduino: " + strIncom);
+                        Log.d(LogPrefix, "Данные от Arduino" + strIncom);
                         break;
                 }
             }
@@ -121,61 +129,74 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (Is_Bluetooth_Enabled)
         {
-            SetLogText(GetTime() + " : " + "Bluetooth enabled");
+            Log.d(LogPrefix, "Bluetooth включен");
         }
         if (MacAdress == "00:00:00:00:00:00")
         {
             on_button.setBackgroundColor(Color.RED);
             on_button.setText("BAD MacAdress");
-            SetLogText(GetTime() + "Неправильный MacAdress");
+            Log.d(LogPrefix, "MAC ADRESS не задан");
         }
         else
         {
-            SetLogText(GetTime() + "Пытаемся соединиться с " + MacAdress);
+            Log.d(LogPrefix, "Пытаемся обнаружить девайс "+ MacAdress);
 
             Camin = bluetooth_adapter.getRemoteDevice(MacAdress);
 
             if (Camin.getName() != null)
             {
-                SetLogText(GetTime() + "Соединение успешно с " + Camin.getName());
+                Log.d(LogPrefix, "Устройство обнаружено:" + Camin.getName());
 
                 try
                 {
                     socket = Camin.createRfcommSocketToServiceRecord(ID);
-                    SetLogText(GetTime() + "Создали сокет");                               // Студия не дала сделать if
+                    Log.d(LogPrefix, "Создали сокет");                               // Студия не дала сделать if
                 }
                 catch (IOException e)
                 {
-                    SetLogText(GetTime() + "Ошибка создания сокета " + e.getMessage());
+                    Log.d(LogPrefix, "Ошибка создания сокета "+ e.getMessage());
                 }
 
-                SetLogText(GetTime() + "Устанавливается соединение");
+                Log.d(LogPrefix, "Попытка установки соединения");
                 try
                 {
                     socket.connect();
-                    SetLogText(GetTime() + "Соединение установлено");
+                    Log.d(LogPrefix,"Соединение установлено");
+                    IsConnect = true;
                 }
                 catch (IOException e)
                 {
                     try
                     {
+                        Log.d(LogPrefix,"Ошибка "+e.getMessage());
+                        Log.d(LogPrefix,"Не смогли соединиться, пытаюсь закрыть сокет");
                         socket.close();
-                        SetLogText(GetTime() + "Сокет закрыт");
+                        Log.d(LogPrefix,"Сокет закрыт");
+                        socket = null;
                     }
                     catch (IOException e2)
                     {
-                        SetLogText(GetTime() + "Ошибка закрытия сокета");
+                        Log.d(LogPrefix,"Ошибка закрытия сокета " +e2.getMessage());
                     }
                 }
 
-                IO_Tread = new NewThread(socket);
-                IO_Tread.start();
+                if (!IsConnect)
+                {
+                    Log.d(LogPrefix,"Запускаю отдельный поток ввода-вывода");
+                    IO_Tread = new NewThread(socket);
+                    IO_Tread.start();
 
-                on_button.setText("Выключить");
+                    Log.d(LogPrefix,"Запускаю отдельный поток опроса температуры");
+                    R_Thread = new RequestThread(socket);
+                    R_Thread.start();
+
+
+                    on_button.setText("Выключить");
+                }
             }
             else
             {
-                SetLogText(GetTime() + "Невозможно установить соединение с " + MacAdress);
+                Log.d(LogPrefix,"Устройство "+MacAdress+" не обнаружено");
             }
 
         }
@@ -185,16 +206,6 @@ public class MainActivity extends AppCompatActivity {
     public String GetTime()
     {
         return (DateFormat.getTimeInstance().format(Calendar.getInstance().getTime()) + " : ");
-    }
-
-    public void SetLogText(String message)
-    {
-        if (log_screen.getText() != "NULL")
-        {
-            log_screen2.setText(log_screen.getText());
-        }
-        log_screen.setText(message);
-
     }
 
     public void CommandParcer(String ArduinoData)
@@ -216,8 +227,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if(IsCommand)
                 {
-                    SetLogText("КАМИН ВКЛЮЧЕН СКА");
-                    SetLogText("КАМИН ВКЛЮЧЕН СКА");
+                    Log.d("Команда от ардуино TEST",ArduinoData);
                     IsCommand=false;
                     break;
                 }
@@ -232,18 +242,30 @@ public class MainActivity extends AppCompatActivity {
     public void onPause()
     {
         super.onPause();
-        try     {
-            socket.close();
-            SetLogText("Сокет закрыт");
-        } catch (IOException e2) {
-            SetLogText("OnPause сокет не закрыт");
+        Log.d(LogPrefix,"Приложение ушло в OnPause");
+        if (socket != null)
+        {
+            Log.d(LogPrefix,"Сокет был создан, попробую закрыть в OnPause");
+            try
+            {
+                socket.close();
+                Log.d(LogPrefix, GetTime() + "Закрыли сокет в OnPause");
+                socket = null;
+            }
+            catch (IOException e2)
+            {
+                Log.d(LogPrefix, GetTime() + "Сокет не закрыт в OnPause " + e2.getMessage());
+            }
         }
+        else
+            Log.d(LogPrefix,"Сокет не был создан, закрывать в OnPause нечего");
+
     }
 
 
-
-    //-----------------------------------------------------Новый поток------------------------------------------------------
-    private class NewThread extends Thread {
+    //-----------------------------------------------------Новый поток IO------------------------------------------------------
+    private class NewThread extends Thread
+    {
         private BluetoothSocket thread_socket = null;
         private OutputStream OutStr = null;
         private InputStream InStr = null;
@@ -252,18 +274,15 @@ public class MainActivity extends AppCompatActivity {
         public NewThread(BluetoothSocket _socket)
         {
             thread_socket = _socket;
-            OutputStream tmp_outstream;
-            InputStream tmp_instream;
             try
             {
-                tmp_outstream = thread_socket.getOutputStream();
-                tmp_instream = thread_socket.getInputStream();
-                OutStr = tmp_outstream;
-                InStr = tmp_instream;
+                OutStr = thread_socket.getOutputStream();
+                InStr = thread_socket.getInputStream();
+                Log.d(LogPrefix,"Выделили IO потоки");
             }
             catch (IOException e)
             {
-                SetLogText(GetTime() + "Ошибка связки потоков " + e.getMessage());
+                Log.d(LogPrefix,"Ошибка выделения IO потоков "+e.getMessage());
             }
         }
 
@@ -271,7 +290,7 @@ public class MainActivity extends AppCompatActivity {
             byte[] buffer = new byte[100];
             int bytes;
 
-            while (true)
+            while (!ThreadQuit)
             {
                 try
                 {
@@ -280,10 +299,11 @@ public class MainActivity extends AppCompatActivity {
                 }
                 catch (IOException e)
                 {
+                    Log.d(LogPrefix,"Ошибка "+e.getMessage());
                     break;
                 }
-
             }
+            Log.d(LogPrefix,"Вызвано принудительное завершение, конец IO потока");
 
         }
 
@@ -291,26 +311,93 @@ public class MainActivity extends AppCompatActivity {
         {
             byte[] message = _message.getBytes();
 
-            SetLogText(GetTime() + "Отправляем данные:" + _message);
+            Log.d(LogPrefix, "Пытаюсь отправить данные "+ _message +" по Bluetooth");
             try
             {
                 OutStr.write(message);
+                Log.d(LogPrefix, " Данные "+_message+" отправлены");
             }
             catch (IOException e)
             {
-                SetLogText(GetTime() + "Ош. отпр:" + e.getMessage());
+                Log.d(LogPrefix, " Ошибка отправки данных "+ e.getMessage());
             }
         }
 
-        public Object status_OutStrem() {
-            if (OutStr == null) {
+        public Object status_OutStr()
+        {
+            if (OutStr == null)
+            {
                 return null;
-            } else {
+            }
+            else
+            {
                 return OutStr;
             }
         }
     }
-    //----------------------------------------------------/Новый поток------------------------------------------------------
+    //----------------------------------------------------/Новый поток IO------------------------------------------------------
+
+    //-----------------------------------------------------Новый поток R------------------------------------------------------
+    private class RequestThread extends Thread
+    {
+        private BluetoothSocket thread_socket = null;
+        private OutputStream OutStr = null;
+        private int QuitLevel = 0;
+
+        public RequestThread(BluetoothSocket _socket)
+        {
+            thread_socket = _socket;
+            try
+            {
+                OutStr = thread_socket.getOutputStream();
+                Log.d(LogPrefix, " Выделили Request поток");
+            }
+            catch (IOException e)
+            {
+                Log.d(LogPrefix, " Ошибка выделения Request потока "+e.getMessage());
+            }
+        }
+
+        public void run()
+        {
+            while ((QuitLevel != 5) && (!ThreadQuit))
+            {
+                Bluetooth_send("111");
+                try
+                {
+                    Log.d(LogPrefix, " Заснули на 5 сек");
+                    sleep(5000);
+                }
+                catch (InterruptedException e1)
+                {
+                    Log.d(LogPrefix, " Ошибка в засыпании потока опроса" + e1.getMessage());
+                    QuitLevel++;
+                }
+            }
+            if (QuitLevel == 5)
+                Log.d(LogPrefix, "Превышено количество неудачных опросов температуры, конец потока");
+            else
+                Log.d(LogPrefix, "Вызвано принудительное завершение, конец R потока");
+
+        }
+
+        public void Bluetooth_send(String _message)
+        {
+            byte[] message = _message.getBytes();
+
+            Log.d(LogPrefix," Пытаюсь отправить запрос температуры по Bluetooth");
+            try
+            {
+                OutStr.write(message);
+                Log.d(LogPrefix, " Запрос на температуру отправлен");
+            }
+            catch (IOException e)
+            {
+                Log.d(LogPrefix," Ошибка отправки запроса на температуру "+ e.getMessage());
+            }
+        }
+    }
+    //----------------------------------------------------/Новый поток R------------------------------------------------------
 
 
     @Override
