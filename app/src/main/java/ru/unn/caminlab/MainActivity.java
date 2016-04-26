@@ -15,6 +15,7 @@ import android.view.MenuItem;
 
 import android.bluetooth.*;
 import android.widget.Button;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.app.Activity;
 import android.content.Intent;
@@ -39,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothSocket socket = null;
 
     public  Button on_button;
+    public  Switch on_switch;
     public  TextView temp_screen;
     private NewThread IO_Tread;
     private RequestThread R_Thread;
@@ -76,8 +78,9 @@ public class MainActivity extends AppCompatActivity {
         //-----------------------------------/default--------------------------------
 
         bluetooth_adapter = BluetoothAdapter.getDefaultAdapter();
-        on_button = (Button) findViewById(R.id.On_Button);
+        on_button   = (Button)   findViewById(R.id.On_Button);
         temp_screen = (TextView) findViewById(R.id.Temp_Out);
+        on_switch   = (Switch)   findViewById(R.id.On_Switch);
 
         if (!bluetooth_adapter.isEnabled())
         {
@@ -92,17 +95,51 @@ public class MainActivity extends AppCompatActivity {
             Is_Bluetooth_Enabled = true;
         }
 
-
-        on_button.setOnClickListener(new View.OnClickListener() {
+        on_switch.setOnClickListener(new View.OnClickListener()
+        {
             @Override
-            public void onClick(View v) {
-                Log.d(LogPrefix, "Кнопка ВКЛ нажата");
-                if (MacAdress != "00:00:00:00:00:00") {
+            public void onClick(View v)
+            {
+                Log.d(LogPrefix, "Свитчер нажат");
+                if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
+                {
                     Log.d(LogPrefix, "Попытаемся отправить команду 1");
                     IO_Tread.Bluetooth_send("1");
                     Log.d(LogPrefix, "Отправлены данные : 1");
-                } else
-                    Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
+                    on_switch.setChecked(true);
+                }
+                else
+                {
+                    if (!IsConnect)
+                        Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
+                    else
+                        Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
+                    on_switch.setChecked(true);
+                }
+
+            }
+        });
+
+        on_button.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
+            public void onClick(View v)
+            {
+                Log.d(LogPrefix, "Кнопка ВКЛ нажата");
+                if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
+                {
+                    Log.d(LogPrefix, "Попытаемся отправить команду 1");
+                    IO_Tread.Bluetooth_send("1");
+                    Log.d(LogPrefix, "Отправлены данные : 1");
+                }
+                else
+                {
+                    if (!IsConnect)
+                        Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
+                    else
+                        Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
+                }
+
             }
         });
 
@@ -180,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                if (!IsConnect)
+                if (IsConnect)
                 {
                     Log.d(LogPrefix,"Запускаю отдельный поток ввода-вывода");
                     IO_Tread = new NewThread(socket);
@@ -203,10 +240,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public String GetTime()
+    /*public String GetTime()
     {
         return (DateFormat.getTimeInstance().format(Calendar.getInstance().getTime()) + " : ");
-    }
+    }*/
 
     public void CommandParcer(String ArduinoData)
     {
@@ -248,13 +285,25 @@ public class MainActivity extends AppCompatActivity {
             Log.d(LogPrefix,"Сокет был создан, попробую закрыть в OnPause");
             try
             {
+                ThreadQuit = true;
+                Log.d(LogPrefix, "Пытаюсь закрыть поток IO");
+                try
+                {
+                    IO_Tread.wait();
+                    R_Thread.wait();
+                }
+                catch (InterruptedException e)
+                {
+                    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
+                }
+
                 socket.close();
-                Log.d(LogPrefix, GetTime() + "Закрыли сокет в OnPause");
+                Log.d(LogPrefix,"Закрыли сокет в OnPause");
                 socket = null;
             }
             catch (IOException e2)
             {
-                Log.d(LogPrefix, GetTime() + "Сокет не закрыт в OnPause " + e2.getMessage());
+                Log.d(LogPrefix,"Сокет не закрыт в OnPause " + e2.getMessage());
             }
         }
         else
@@ -286,7 +335,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        public void run() {
+        public void run()
+        {
             byte[] buffer = new byte[100];
             int bytes;
 
@@ -307,7 +357,7 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
-        public void Bluetooth_send(String _message)
+        public synchronized void Bluetooth_send(String _message)                          // можно сделать с семафорами
         {
             byte[] message = _message.getBytes();
 
@@ -323,7 +373,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        public Object status_OutStr()
+        /*public Object status_OutStr()
         {
             if (OutStr == null)
             {
@@ -333,7 +383,7 @@ public class MainActivity extends AppCompatActivity {
             {
                 return OutStr;
             }
-        }
+        }*/
     }
     //----------------------------------------------------/Новый поток IO------------------------------------------------------
 
@@ -381,7 +431,7 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
-        public void Bluetooth_send(String _message)
+        public synchronized void Bluetooth_send(String _message)                                         // можно сделать с семафорами
         {
             byte[] message = _message.getBytes();
 

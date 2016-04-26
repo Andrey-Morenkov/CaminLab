@@ -17,7 +17,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="?android:attr/textAppearanceLarge"
-        android:text="*C"
+        android:text="&#176;C"
         android:id="@+id/Temp_Out"
         android:layout_marginTop="46dp"
         android:autoText="false"
@@ -42,5 +42,52 @@
         android:layout_marginTop="40dp"
         android:layout_below="@+id/Temp_Out"
         android:layout_centerHorizontal="true" />
+
+    <Switch
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/On_Switch"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="SetTemperature"
+        android:id="@+id/Set_Temp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="173dp" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Установить"
+        android:id="@+id/Set_Button"
+        android:layout_marginTop="34dp"
+        android:layout_alignTop="@+id/Set_Temp"
+        android:layout_centerHorizontal="true" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="+"
+        android:id="@+id/Plus_Temp"
+        android:layout_above="@+id/Set_Temp"
+        android:layout_toLeftOf="@+id/On_Switch"
+        android:layout_toStartOf="@+id/On_Switch" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="-"
+        android:id="@+id/Minus_Temp"
+        android:layout_alignTop="@+id/Set_Temp"
+        android:layout_toLeftOf="@+id/On_Switch"
+        android:layout_toStartOf="@+id/On_Switch" />
 
 </RelativeLayout>
