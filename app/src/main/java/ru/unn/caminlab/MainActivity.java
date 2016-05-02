@@ -15,6 +15,8 @@ import android.view.MenuItem;
 
 import android.bluetooth.*;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.app.Activity;
@@ -39,15 +41,17 @@ public class MainActivity extends AppCompatActivity {
     public  BluetoothDevice Camin;
     private BluetoothSocket socket = null;
 
-    public  Button on_button;
-    public  Switch on_switch;
-    public  TextView temp_screen;
+    public  Button    on_button;
+    public  Switch    on_switch;
+    public  CheckBox  check_cam_status;
+    public  TextView  temp_screen;
+    public  EditText  set_temp;
     private NewThread IO_Tread;
     private RequestThread R_Thread;
 
 
 
-    final int ArduinoMessage = 1;
+    public final int ArduinoMessage = 666;
 
     private Handler h;
 
@@ -56,14 +60,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean Is_Bluetooth_Enabled = false;
     private boolean ThreadQuit = false;
 
-    public boolean IsTemp = false;
-    public boolean IsCommand = false;
     public boolean IsConnect = false;
     public char degree = 176;
 
     final String LogPrefix = "****CaminLab**** ";
-    private static String MacAdress = "20:16:01:06:43:24";
-    private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+      private static String MacAdress = "20:16:01:06:43:24";
+    //private static String MacAdress = "00:0B:0D:06:75:42";
+      private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     //-----------------------------------------------------------------------------------------------------
 
@@ -81,6 +84,8 @@ public class MainActivity extends AppCompatActivity {
         on_button   = (Button)   findViewById(R.id.On_Button);
         temp_screen = (TextView) findViewById(R.id.Temp_Out);
         on_switch   = (Switch)   findViewById(R.id.On_Switch);
+        check_cam_status = (CheckBox) findViewById(R.id.Camin_Status);
+        set_temp = (EditText) findViewById(R.id.Set_Temp);
 
         if (!bluetooth_adapter.isEnabled())
         {
@@ -95,30 +100,56 @@ public class MainActivity extends AppCompatActivity {
             Is_Bluetooth_Enabled = true;
         }
 
+        check_cam_status.setChecked(false);  // Камин выключен
+
         on_switch.setOnClickListener(new View.OnClickListener()
         {
             @Override
             public void onClick(View v)
             {
                 Log.d(LogPrefix, "Свитчер нажат");
-                if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
+                if (!on_switch.isChecked())
                 {
-                    Log.d(LogPrefix, "Попытаемся отправить команду 1");
-                    IO_Tread.Bluetooth_send("1");
-                    Log.d(LogPrefix, "Отправлены данные : 1");
-                    on_switch.setChecked(true);
+                    if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
+                    {
+                        Log.d(LogPrefix, "Попытаемся отправить команду 1");
+                        IO_Tread.Bluetooth_send("1");
+                        Log.d(LogPrefix, "Отправлены данные : 1");
+                        on_switch.setChecked(true);
+                    }
+                    else
+                    {
+                        if (!IsConnect)
+                            Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
+                        else
+                            Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
+                        //on_switch.setChecked(true);
+                    }
                 }
                 else
                 {
-                    if (!IsConnect)
-                        Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
+                    if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
+                    {
+                        Log.d(LogPrefix, "Попытаемся отправить команду 0");
+                        IO_Tread.Bluetooth_send("0");
+                        Log.d(LogPrefix, "Отправлены данные : 0");
+                        on_switch.setChecked(false);
+                    }
                     else
-                        Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
-                    on_switch.setChecked(true);
+                    {
+                        if (!IsConnect)
+                            Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
+                        else
+                            Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
+                        //on_switch.setChecked(true);
+                    }
                 }
+
 
             }
         });
+
+        //set_temp.setOnEditorActionListener(new View.);
 
         on_button.setOnClickListener(new View.OnClickListener()
         {
@@ -131,6 +162,8 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(LogPrefix, "Попытаемся отправить команду 1");
                     IO_Tread.Bluetooth_send("1");
                     Log.d(LogPrefix, "Отправлены данные : 1");
+                    Log.d(LogPrefix, "Проверяем статус камина");
+                    CheckStatus();
                 }
                 else
                 {
@@ -145,15 +178,13 @@ public class MainActivity extends AppCompatActivity {
 
         h = new Handler()
         {
-            public void handleMessage(Message _message)
+            public void handleMessage(Message msg)
             {
-                switch (_message.what)
+                switch (msg.what)
                 {
                     case ArduinoMessage:
-                        byte[] readBuf = (byte[]) _message.obj;
-                        String strIncom = new String(readBuf, 0, _message.arg1);
-                        CommandParcer(strIncom);
-                        Log.d(LogPrefix, "Данные от Arduino" + strIncom);
+                        Log.d(LogPrefix, "$$$$ Пришедшая строка от Ардуино $$$$ -->"+ msg.obj.toString());
+                        CommandParcer(msg.obj.toString());
                         break;
                 }
             }
@@ -164,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
     public void onResume()
     {
         super.onResume();
+        ThreadQuit = false;
         if (Is_Bluetooth_Enabled)
         {
             Log.d(LogPrefix, "Bluetooth включен");
@@ -197,6 +229,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(LogPrefix, "Попытка установки соединения");
                 try
                 {
+                    bluetooth_adapter.cancelDiscovery();
                     socket.connect();
                     Log.d(LogPrefix,"Соединение установлено");
                     IsConnect = true;
@@ -227,6 +260,8 @@ public class MainActivity extends AppCompatActivity {
                     R_Thread = new RequestThread(socket);
                     R_Thread.start();
 
+                    Log.d(LogPrefix,"Запрашиваем статус камина");
+                    CheckStatus();
 
                     on_button.setText("Выключить");
                 }
@@ -239,6 +274,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void CheckStatus()
+    {
+        IO_Tread.Bluetooth_send("5"); // статус камина
+    }
+
 
     /*public String GetTime()
     {
@@ -247,34 +287,113 @@ public class MainActivity extends AppCompatActivity {
 
     public void CommandParcer(String ArduinoData)
     {
-        switch (ArduinoData)
+        switch (ArduinoData.charAt(0))
         {
-            case "t":
-                IsTemp = true;
+            case 't':
+            {
+                Log.d(LogPrefix, "<CommandParcer> Пришла температура от Arduino: "+ArduinoData.substring(1));
+                temp_screen.setText(ArduinoData.substring(1) + " " + degree + "C");
                 break;
-            case "c":
+            }
+            case 'c':
+            {
+                Log.d(LogPrefix, "<CommandParcer> Пришла команда от Arduino: "+ArduinoData.substring(1));
+                break;
+            }
+            case 's':
+            {
+
+                Log.d(LogPrefix, "<CommandParcer> Пришел статус от Arduino: "+ArduinoData.substring(1));
+                switch (ArduinoData.substring(1))
+                {
+                    case "0":
+                    {
+                        Log.d(LogPrefix, "<CommandParcer> Камин выключен");
+                        check_cam_status.setChecked(false);
+                        break;
+                    }
+                    case "1":
+                    {
+                        Log.d(LogPrefix, "<CommandParcer> Камин включен");
+                        check_cam_status.setChecked(true);
+                        break;
+                    }
+                    default:
+                    {
+                        Log.d(LogPrefix, "<CommandParcer> Неизвестный статус " + ArduinoData);
+                        break;
+                    }
+                }
+                break;
+            }
+            default:
+            {
+                if (ArduinoData.charAt(0)!='-')
+                    Log.d(LogPrefix,"<CommandParcer> Неизвестные данные:" + ArduinoData);
+            }
+        }
+    }
+
+   /* public boolean IsTemp = false;
+    public boolean IsCommand = false;
+    public boolean IsStatus = false;
+
+    public void CommandParcer(String ArduinoData)
+    {
+        switch (ArduinoData.charAt(0))
+        {
+            case 't':
+            {
+                Log.d(LogPrefix, "<CommandParcer> Пришла температура от Arduino");
+                IsTemp=true;
+                break;
+            }
+            case 'c':
+            {
+                Log.d(LogPrefix, "<CommandParcer> Пришла команда от Arduino");
                 IsCommand = true;
                 break;
+            }
+            case 's':
+            {
+
+                Log.d(LogPrefix, "<CommandParcer> Пришел статус от Arduino");
+                IsStatus = true;
+                break;
+            }
             default:
+            {
                 if(IsTemp)
                 {
-                    temp_screen.setText(ArduinoData+" "+degree+"C");
+                    Log.d(LogPrefix, "<CommandParcer> Температура: "+ArduinoData);
+                    temp_screen.setText(ArduinoData + " " + degree + "C");
                     IsTemp=false;
-                    break;
                 }
                 if(IsCommand)
                 {
-                    Log.d("Команда от ардуино TEST",ArduinoData);
+                    Log.d(LogPrefix, "<CommandParcer> Команда: "+ArduinoData);
                     IsCommand=false;
-                    break;
                 }
-
+                if(IsStatus)
+                {
+                    Log.d(LogPrefix, "<CommandParcer> Статус: "+ArduinoData);
+                    if(ArduinoData.charAt(0) == '0')
+                    {
+                        Log.d(LogPrefix, "<CommandParcer> Камин выключен");
+                        check_cam_status.setChecked(false);
+                    }
+                    if(ArduinoData.charAt(0) == '1')
+                    {
+                        Log.d(LogPrefix, "<CommandParcer> Камин включен");
+                        check_cam_status.setChecked(true);
+                    }
+                    IsStatus=false;
+                }
+                    //Log.d(LogPrefix,"<CommandParcer> Неизвестные данные:" + ArduinoData);
+            }
         }
-
-
-
     }
-
+    */
     @Override
     public void onPause()
     {
@@ -286,11 +405,13 @@ public class MainActivity extends AppCompatActivity {
             try
             {
                 ThreadQuit = true;
-                Log.d(LogPrefix, "Пытаюсь закрыть поток IO");
+                Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R");
                 try
                 {
-                    IO_Tread.wait();
-                    R_Thread.wait();
+                    IO_Tread.join();
+                    Log.d(LogPrefix, "IO поток завершен");
+                    R_Thread.join();
+                    Log.d(LogPrefix, "R поток завершен");
                 }
                 catch (InterruptedException e)
                 {
@@ -345,7 +466,8 @@ public class MainActivity extends AppCompatActivity {
                 try
                 {
                     bytes = InStr.read(buffer);
-                    h.obtainMessage(ArduinoMessage, bytes, -1, buffer).sendToTarget();
+                    String _message = new String(buffer, 0, bytes);
+                    h.obtainMessage(ArduinoMessage, bytes, -1111, _message).sendToTarget();
                 }
                 catch (IOException e)
                 {
@@ -357,7 +479,7 @@ public class MainActivity extends AppCompatActivity {
 
         }
 
-        public synchronized void Bluetooth_send(String _message)                          // можно сделать с семафорами
+        public synchronized void Bluetooth_send(String _message)
         {
             byte[] message = _message.getBytes();
 
@@ -412,7 +534,7 @@ public class MainActivity extends AppCompatActivity {
         {
             while ((QuitLevel != 5) && (!ThreadQuit))
             {
-                Bluetooth_send("111");
+                Bluetooth_send("2");
                 try
                 {
                     Log.d(LogPrefix, " Заснули на 5 сек");

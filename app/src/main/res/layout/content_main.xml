@@ -49,26 +49,19 @@
         android:id="@+id/On_Switch"
         android:layout_alignParentTop="true"
         android:layout_alignParentRight="true"
-        android:layout_alignParentEnd="true" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceMedium"
-        android:text="SetTemperature"
-        android:id="@+id/Set_Temp"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="173dp" />
+        android:layout_alignParentEnd="true"
+        android:checked="false"
+        android:clickable="false"
+        android:enabled="false" />
 
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Установить"
         android:id="@+id/Set_Button"
-        android:layout_marginTop="34dp"
-        android:layout_alignTop="@+id/Set_Temp"
-        android:layout_centerHorizontal="true" />
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="90dp" />
 
     <Button
         style="?android:attr/buttonStyleSmall"
@@ -76,7 +69,7 @@
         android:layout_height="wrap_content"
         android:text="+"
         android:id="@+id/Plus_Temp"
-        android:layout_above="@+id/Set_Temp"
+        android:layout_above="@+id/Set_Button"
         android:layout_toLeftOf="@+id/On_Switch"
         android:layout_toStartOf="@+id/On_Switch" />
 
@@ -86,8 +79,33 @@
         android:layout_height="wrap_content"
         android:text="-"
         android:id="@+id/Minus_Temp"
-        android:layout_alignTop="@+id/Set_Temp"
-        android:layout_toLeftOf="@+id/On_Switch"
-        android:layout_toStartOf="@+id/On_Switch" />
+        android:layout_alignTop="@+id/Plus_Temp"
+        android:layout_toLeftOf="@+id/On_Button"
+        android:layout_toStartOf="@+id/On_Button" />
+
+    <CheckBox
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Статус камина"
+        android:id="@+id/Camin_Status"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:singleLine="true"
+        android:checked="false" />
+
+    <EditText
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:ems="10"
+        android:id="@+id/Set_Temp"
+        android:layout_above="@+id/Set_Button"
+        android:layout_alignLeft="@+id/Set_Button"
+        android:layout_alignStart="@+id/Set_Button"
+        android:layout_alignRight="@+id/Set_Button"
+        android:layout_alignEnd="@+id/Set_Button"
+        android:clickable="false"
+        android:editable="true" />
 
 </RelativeLayout>
