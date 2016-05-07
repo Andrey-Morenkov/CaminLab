@@ -1,6 +1,7 @@
 package ru.unn.caminlab;
 
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Message;
@@ -16,7 +17,9 @@ import android.view.MenuItem;
 import android.bluetooth.*;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.app.Activity;
@@ -24,8 +27,10 @@ import android.content.Intent;
 import android.util.Log;
 
 import java.text.DateFormat;
+import java.text.DecimalFormat;
 import java.util.Calendar;
 import java.util.UUID;
+import java.util.Date;
 import java.net.Socket;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,31 +46,39 @@ public class MainActivity extends AppCompatActivity {
     public  BluetoothDevice Camin;
     private BluetoothSocket socket = null;
 
-    public  Button    on_button;
-    public  Switch    on_switch;
-    public  CheckBox  check_cam_status;
-    public  TextView  temp_screen;
-    public  EditText  set_temp;
-    private NewThread IO_Tread;
+    public  Button        on_button;
+    public  Button        plus_temp;
+    public  Button        minus_temp;
+    public  Button        set_button;
+    public  CheckBox      check_cam_status;
+    public  TextView      temp_screen;
+    public  EditText      set_temp;
+    private NewThread     IO_Tread;
     private RequestThread R_Thread;
+    private CheckThread   Ch_Thread;
+    private String        currTemp = null;
+    public ImageView      online;
 
 
 
     public final int ArduinoMessage = 666;
+    public final int CaminOn = 111;
 
     private Handler h;
+    private Handler ch;
 
 
     private static final int REQUEST_ENABLE_BT = 0;
     private boolean Is_Bluetooth_Enabled = false;
     private boolean ThreadQuit = false;
+    private boolean isOn = false;
 
     public boolean IsConnect = false;
     public char degree = 176;
 
     final String LogPrefix = "****CaminLab**** ";
-      private static String MacAdress = "20:16:01:06:43:24";
-    //private static String MacAdress = "00:0B:0D:06:75:42";
+      private static String MacAdress = "20:16:01:06:43:24";        // Arduino
+      //private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
       private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     //-----------------------------------------------------------------------------------------------------
@@ -75,6 +88,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         //------------------------------------default-------------------------------
         super.onCreate(savedInstanceState);
+        Log.d(LogPrefix, "<<< On Create >>>");
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -83,9 +97,12 @@ public class MainActivity extends AppCompatActivity {
         bluetooth_adapter = BluetoothAdapter.getDefaultAdapter();
         on_button   = (Button)   findViewById(R.id.On_Button);
         temp_screen = (TextView) findViewById(R.id.Temp_Out);
-        on_switch   = (Switch)   findViewById(R.id.On_Switch);
         check_cam_status = (CheckBox) findViewById(R.id.Camin_Status);
         set_temp = (EditText) findViewById(R.id.Set_Temp);
+        plus_temp = (Button) findViewById(R.id.Plus_Temp);
+        minus_temp = (Button) findViewById(R.id.Minus_Temp);
+        set_button = (Button) findViewById(R.id.Set_Button);
+        online = (ImageView) findViewById(R.id.Online);
 
         if (!bluetooth_adapter.isEnabled())
         {
@@ -102,53 +119,6 @@ public class MainActivity extends AppCompatActivity {
 
         check_cam_status.setChecked(false);  // Камин выключен
 
-        on_switch.setOnClickListener(new View.OnClickListener()
-        {
-            @Override
-            public void onClick(View v)
-            {
-                Log.d(LogPrefix, "Свитчер нажат");
-                if (!on_switch.isChecked())
-                {
-                    if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
-                    {
-                        Log.d(LogPrefix, "Попытаемся отправить команду 1");
-                        IO_Tread.Bluetooth_send("1");
-                        Log.d(LogPrefix, "Отправлены данные : 1");
-                        on_switch.setChecked(true);
-                    }
-                    else
-                    {
-                        if (!IsConnect)
-                            Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
-                        else
-                            Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
-                        //on_switch.setChecked(true);
-                    }
-                }
-                else
-                {
-                    if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
-                    {
-                        Log.d(LogPrefix, "Попытаемся отправить команду 0");
-                        IO_Tread.Bluetooth_send("0");
-                        Log.d(LogPrefix, "Отправлены данные : 0");
-                        on_switch.setChecked(false);
-                    }
-                    else
-                    {
-                        if (!IsConnect)
-                            Log.d(LogPrefix, "Устройство не подключено, не могу отправить данные");
-                        else
-                            Log.d(LogPrefix, "MAC ADRESS не задан, не могу отправить");
-                        //on_switch.setChecked(true);
-                    }
-                }
-
-
-            }
-        });
-
         //set_temp.setOnEditorActionListener(new View.);
 
         on_button.setOnClickListener(new View.OnClickListener()
@@ -156,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v)
             {
-                Log.d(LogPrefix, "Кнопка ВКЛ нажата");
+                Log.d(LogPrefix, "Кнопка ВКЛ / ВЫКЛ нажата");
                 if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
                 {
                     Log.d(LogPrefix, "Попытаемся отправить команду 1");
@@ -176,6 +146,64 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        set_temp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                set_temp.setCursorVisible(true);
+            }
+        });
+
+
+
+        plus_temp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (set_temp.getText().length()==0)
+                {
+                    float temp = Float.parseFloat(currTemp);
+                    temp+=0.1;
+                    set_temp.setText(String.valueOf(temp));
+                    currTemp=new DecimalFormat("0.0").format(temp);
+                }
+                else
+                {
+                    float temp = Float.parseFloat(set_temp.getText().toString());
+                    temp+=0.1;
+                    set_temp.setText(String.valueOf(temp));
+                    currTemp=new DecimalFormat("0.0").format(temp);
+                }
+            }
+        });
+
+        minus_temp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (set_temp.getText().length()==0)
+                {
+                    float temp = Float.parseFloat(currTemp);
+                    temp-=0.1;
+                    set_temp.setText(String.valueOf(temp));
+                    currTemp=new DecimalFormat("0.0").format(temp);
+                }
+                else
+                {
+                    float temp = Float.parseFloat(set_temp.getText().toString());
+                    temp-=0.1;
+                    set_temp.setText(String.valueOf(temp));
+                    currTemp=new DecimalFormat("0.0").format(temp);
+                }
+            }
+        });
+
+        set_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+            }
+        });
+
+
+
         h = new Handler()
         {
             public void handleMessage(Message msg)
@@ -189,13 +217,30 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
+
+        ch = new Handler()
+        {
+            public void handleMessage(Message msg)
+            {
+                switch (msg.what)
+                {
+                    case CaminOn:
+                        online.setImageResource(android.R.drawable.presence_online);
+                        break;
+                }
+            }
+        };
     }
 
     @Override
     public void onResume()
     {
         super.onResume();
+        Log.d(LogPrefix, "<<< On Resume >>>");
+
         ThreadQuit = false;
+        online.setImageResource(android.R.drawable.presence_offline);
+
         if (Is_Bluetooth_Enabled)
         {
             Log.d(LogPrefix, "Bluetooth включен");
@@ -223,22 +268,30 @@ public class MainActivity extends AppCompatActivity {
                 }
                 catch (IOException e)
                 {
-                    Log.d(LogPrefix, "Ошибка создания сокета "+ e.getMessage());
+                    Log.d(LogPrefix, "Ошибка создания сокета " + e.getMessage());
                 }
 
+                bluetooth_adapter.cancelDiscovery();
+
                 Log.d(LogPrefix, "Попытка установки соединения");
+
                 try
                 {
-                    bluetooth_adapter.cancelDiscovery();
                     socket.connect();
-                    Log.d(LogPrefix,"Соединение установлено");
+                    Log.d(LogPrefix, "Соединение установлено");
+                    online.setImageResource(android.R.drawable.presence_online);
                     IsConnect = true;
                 }
                 catch (IOException e)
                 {
-                    try
+                    Log.d(LogPrefix, "Ошибка " + e.getMessage());
+                    Log.d(LogPrefix, "Создаю поток опроса устройства");
+                    Ch_Thread = new CheckThread(socket);
+                    Ch_Thread.start();
+                    /*try
                     {
                         Log.d(LogPrefix,"Ошибка "+e.getMessage());
+
                         Log.d(LogPrefix,"Не смогли соединиться, пытаюсь закрыть сокет");
                         socket.close();
                         Log.d(LogPrefix,"Сокет закрыт");
@@ -247,8 +300,9 @@ public class MainActivity extends AppCompatActivity {
                     catch (IOException e2)
                     {
                         Log.d(LogPrefix,"Ошибка закрытия сокета " +e2.getMessage());
-                    }
+                    }*/
                 }
+
 
                 if (IsConnect)
                 {
@@ -262,8 +316,6 @@ public class MainActivity extends AppCompatActivity {
 
                     Log.d(LogPrefix,"Запрашиваем статус камина");
                     CheckStatus();
-
-                    on_button.setText("Выключить");
                 }
             }
             else
@@ -273,6 +325,26 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Log.d(LogPrefix, "<<< On Stop >>>");
+    }
+
+    @Override
+    public void onRestart() {
+        super.onRestart();
+        Log.d(LogPrefix, "<<< On Restart >>>");
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(LogPrefix, "<<< On Destroy >>>");
+    }
+
+
 
     public void CheckStatus()
     {
@@ -293,6 +365,7 @@ public class MainActivity extends AppCompatActivity {
             {
                 Log.d(LogPrefix, "<CommandParcer> Пришла температура от Arduino: "+ArduinoData.substring(1));
                 temp_screen.setText(ArduinoData.substring(1) + " " + degree + "C");
+                currTemp = ArduinoData.substring(1);
                 break;
             }
             case 'c':
@@ -310,12 +383,14 @@ public class MainActivity extends AppCompatActivity {
                     {
                         Log.d(LogPrefix, "<CommandParcer> Камин выключен");
                         check_cam_status.setChecked(false);
+                        on_button.setText("Включить");
                         break;
                     }
                     case "1":
                     {
                         Log.d(LogPrefix, "<CommandParcer> Камин включен");
                         check_cam_status.setChecked(true);
+                        on_button.setText("Выключить");
                         break;
                     }
                     default:
@@ -332,6 +407,12 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(LogPrefix,"<CommandParcer> Неизвестные данные:" + ArduinoData);
             }
         }
+    }
+
+    public void SyncTime()
+    {
+        Date date = new Date();
+        long time = date.getTime();
     }
 
    /* public boolean IsTemp = false;
@@ -398,7 +479,7 @@ public class MainActivity extends AppCompatActivity {
     public void onPause()
     {
         super.onPause();
-        Log.d(LogPrefix,"Приложение ушло в OnPause");
+        Log.d(LogPrefix, "<<< On Pause >>>");
         if (socket != null)
         {
             Log.d(LogPrefix,"Сокет был создан, попробую закрыть в OnPause");
@@ -570,6 +651,64 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     //----------------------------------------------------/Новый поток R------------------------------------------------------
+
+    //-----------------------------------------------------Новый поток Check------------------------------------------------------
+    private class CheckThread extends Thread
+    {
+        private BluetoothSocket thread_socket = null;
+        //private OutputStream OutStr = null;
+       // private InputStream InStr = null;
+
+
+        public CheckThread(BluetoothSocket _socket)
+        {
+            thread_socket = _socket;
+        }
+
+        public void run()
+        {
+            while(!IsConnect)
+            {
+                try
+                {
+                    Log.d(LogPrefix, "<CheckThread> Пытаюсь достучаться");
+                    thread_socket.connect();
+                    Log.d(LogPrefix, "<CheckThread> Соединение установлено");
+                    ch.obtainMessage(CaminOn, -1, -1, -1).sendToTarget();
+                    IsConnect = true;
+                }
+                catch (IOException e)
+                {
+                    Log.d(LogPrefix, "<CheckThread> Ошибка " + e.getMessage());
+                    try
+                    {
+                        Log.d(LogPrefix, "<CheckThread> Заснули на 3 сек");
+                        sleep(3000);
+                    }
+                    catch (InterruptedException e1)
+                    {
+                        Log.d(LogPrefix, "<CheckThread> Ошибка в засыпании потока опроса" + e1.getMessage());
+                    }
+                }
+                if(IsConnect)
+                {
+                    {
+                        Log.d(LogPrefix,"<CheckThread> Запускаю отдельный поток ввода-вывода");
+                        IO_Tread = new NewThread(socket);
+                        IO_Tread.start();
+
+                        Log.d(LogPrefix,"<CheckThread> Запускаю отдельный поток опроса температуры");
+                        R_Thread = new RequestThread(socket);
+                        R_Thread.start();
+
+                        Log.d(LogPrefix,"<CheckThread> Запрашиваем статус камина");
+                        CheckStatus();
+                    }
+                }
+            }
+        }
+    }
+    //----------------------------------------------------/Новый поток Check------------------------------------------------------
 
 
     @Override
