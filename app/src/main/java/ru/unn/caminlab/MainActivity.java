@@ -14,6 +14,9 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+
 import android.bluetooth.*;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -29,13 +32,18 @@ import android.util.Log;
 import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.util.Calendar;
-import java.util.UUID;
 import java.util.Date;
 import java.net.Socket;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import android.os.Handler;
+
+import org.achartengine.ChartFactory;
+import org.achartengine.chart.PieChart;
+import org.achartengine.model.CategorySeries;
+import org.achartengine.renderer.DefaultRenderer;
+import org.achartengine.renderer.SimpleSeriesRenderer;
 
 import ru.unn.caminlab.R;
 
@@ -53,11 +61,16 @@ public class MainActivity extends AppCompatActivity {
     public  CheckBox      check_cam_status;
     public  TextView      temp_screen;
     public  EditText      set_temp;
+    public  EditText      set_time;
+    public  Button        set_time_button;
     private NewThread     IO_Tread;
     private RequestThread R_Thread;
     private CheckThread   Ch_Thread;
     private String        currTemp = null;
-    public ImageView      online;
+    private String        Timer = null;
+    public  ImageView     online;
+    public  Semaphore     access;
+    public  Button        graphics;
 
 
 
@@ -85,7 +98,8 @@ public class MainActivity extends AppCompatActivity {
 
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         //------------------------------------default-------------------------------
         super.onCreate(savedInstanceState);
         Log.d(LogPrefix, "<<< On Create >>>");
@@ -103,6 +117,10 @@ public class MainActivity extends AppCompatActivity {
         minus_temp = (Button) findViewById(R.id.Minus_Temp);
         set_button = (Button) findViewById(R.id.Set_Button);
         online = (ImageView) findViewById(R.id.Online);
+        set_time = (EditText) findViewById(R.id.Camin_Timer);
+        set_time_button = (Button) findViewById(R.id.Set_Time);
+        graphics = (Button) findViewById(R.id.graphics);
+        access = new Semaphore(1);
 
         if (!bluetooth_adapter.isEnabled())
         {
@@ -130,7 +148,18 @@ public class MainActivity extends AppCompatActivity {
                 if ((MacAdress != "00:00:00:00:00:00") && (IsConnect))
                 {
                     Log.d(LogPrefix, "Попытаемся отправить команду 1");
-                    IO_Tread.Bluetooth_send("1");
+
+                    try
+                    {
+                        access.acquire();
+                        IO_Tread.Bluetooth_send("1");
+                        access.release();
+                    }
+                    catch (InterruptedException e)
+                    {
+                        Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+                    }
+
                     Log.d(LogPrefix, "Отправлены данные : 1");
                     Log.d(LogPrefix, "Проверяем статус камина");
                     CheckStatus();
@@ -146,10 +175,26 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        graphics.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v)
+            {
+                Intent Graph = new Intent(MainActivity.this, GraphicsActivity.class);
+                startActivityForResult(Graph, 666);
+            }
+        });
+
         set_temp.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 set_temp.setCursorVisible(true);
+            }
+        });
+
+        set_time.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                set_time.setCursorVisible(true);
             }
         });
 
@@ -164,18 +209,26 @@ public class MainActivity extends AppCompatActivity {
                     temp+=0.1;
                     set_temp.setText(String.valueOf(temp));
                     currTemp=new DecimalFormat("0.0").format(temp);
+                    Log.d(LogPrefix,"<SetTemp> CurrTemp = "+currTemp);
+
                 }
                 else
                 {
                     float temp = Float.parseFloat(set_temp.getText().toString());
                     temp+=0.1;
-                    set_temp.setText(String.valueOf(temp));
+
                     currTemp=new DecimalFormat("0.0").format(temp);
+                    currTemp = currTemp.replace (',', '.');
+                    set_temp.setText(currTemp);
+
+                    Log.d(LogPrefix,"<SetTemp> CurrTemp = "+currTemp);
+
                 }
             }
         });
 
-        minus_temp.setOnClickListener(new View.OnClickListener() {
+        minus_temp.setOnClickListener(new View.OnClickListener()
+        {
             @Override
             public void onClick(View v) {
                 if (set_temp.getText().length()==0)
@@ -184,20 +237,101 @@ public class MainActivity extends AppCompatActivity {
                     temp-=0.1;
                     set_temp.setText(String.valueOf(temp));
                     currTemp=new DecimalFormat("0.0").format(temp);
+                    Log.d(LogPrefix,"<SetTemp> CurrTemp = "+currTemp);
+
                 }
                 else
                 {
                     float temp = Float.parseFloat(set_temp.getText().toString());
                     temp-=0.1;
-                    set_temp.setText(String.valueOf(temp));
+
                     currTemp=new DecimalFormat("0.0").format(temp);
+
+                    currTemp = currTemp.replace (',', '.');
+                    set_temp.setText(currTemp);
+
+                    Log.d(LogPrefix,"<SetTemp> CurrTemp = "+currTemp);
+
                 }
             }
         });
 
         set_button.setOnClickListener(new View.OnClickListener() {
             @Override
+            public void onClick(View v)
+            {
+                try
+                {
+                    access.acquire();
+                    Log.d(LogPrefix, "CurrTemp = "+currTemp);
+                    IO_Tread.Bluetooth_send("6");
+                    IO_Tread.Bluetooth_send(currTemp);
+                    Log.d(LogPrefix, "Отправил CurrTemp");
+                    access.release();
+                }
+                catch (InterruptedException e)
+                {
+                    Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+                }
+            }
+        });
+
+        set_time_button.setOnClickListener(new View.OnClickListener()
+        {
+            @Override
             public void onClick(View v) {
+                String hours = set_time.getText().toString().substring(0,2);
+                Log.d(LogPrefix,"<SetTimer> Target Hours = "+hours);
+                String mins  = set_time.getText().toString().substring(3,5);
+                Log.d(LogPrefix,"<SetTimer> Target Mins = "+mins);
+                if(hours.charAt(0)=='0')
+                    hours = Character.toString(set_time.getText().toString().charAt(1));
+                if(mins.charAt(0)=='0')
+                    mins  = Character.toString(set_time.getText().toString().charAt(4));
+
+                Log.d(LogPrefix,"<SetTimer> Target Correct hours = "+hours);
+                Log.d(LogPrefix,"<SetTimer> Target Correct mins = " +mins);
+                int seconds = Integer.parseInt(hours)*3600 + Integer.parseInt(mins)*60;
+                Log.d(LogPrefix,"<SetTimer> Target All-to-secs = " +seconds);
+
+                Calendar c = Calendar.getInstance();
+                int currH = c.getTime().getHours();
+                int currM = c.getTime().getMinutes();
+
+                Log.d(LogPrefix,"<SetTimer> Curr hours = "+currH);
+                Log.d(LogPrefix,"<SetTimer> Curr mins = " +currM);
+
+                int currseconds = currH*3600 + currM*60;
+                Log.d(LogPrefix,"<SetTimer> Curr All-to-secs = " +currseconds);
+
+                int deltasec = seconds - currseconds;
+                Log.d(LogPrefix,"<SetTimer> delta seconds = "+deltasec);
+
+                if(deltasec < 0)
+                {
+                    deltasec = 24*3600 + deltasec;
+                    Log.d(LogPrefix,"<SetTimer> Correct delta seconds = "+deltasec);
+                }
+
+                if(seconds > 10)
+                {
+                    try
+                    {
+                        access.acquire();
+                        IO_Tread.Bluetooth_send("3");
+                        IO_Tread.Bluetooth_send(String.valueOf(deltasec/256));
+                        IO_Tread.Bluetooth_send(String.valueOf(deltasec%256));
+                        access.release();
+                    }
+                    catch (InterruptedException e)
+                    {
+                        Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+                    }
+                }
+
+                else                                                                                    // МЕГАКОСТЫЛЬ ВСЕХ ВРЕМЕН И НАРОДОВ
+                    Log.d(LogPrefix,"<SetTimer> Таймер работает со временем больше 10 сек");
+
 
             }
         });
@@ -239,6 +373,7 @@ public class MainActivity extends AppCompatActivity {
         Log.d(LogPrefix, "<<< On Resume >>>");
 
         ThreadQuit = false;
+        //online.setImageResource(android.R.drawable.presence_offline);
         online.setImageResource(android.R.drawable.presence_offline);
 
         if (Is_Bluetooth_Enabled)
@@ -348,8 +483,19 @@ public class MainActivity extends AppCompatActivity {
 
     public void CheckStatus()
     {
-        IO_Tread.Bluetooth_send("5"); // статус камина
+        try
+        {
+            access.acquire();
+            IO_Tread.Bluetooth_send("5"); // статус камина
+            access.release();
+        }
+        catch (InterruptedException e)
+        {
+            Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+        }
+
     }
+
 
 
     /*public String GetTime()
@@ -409,11 +555,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void SyncTime()
-    {
-        Date date = new Date();
-        long time = date.getTime();
-    }
 
    /* public boolean IsTemp = false;
     public boolean IsCommand = false;
@@ -487,17 +628,17 @@ public class MainActivity extends AppCompatActivity {
             {
                 ThreadQuit = true;
                 Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R");
-                try
-                {
-                    IO_Tread.join();
-                    Log.d(LogPrefix, "IO поток завершен");
-                    R_Thread.join();
-                    Log.d(LogPrefix, "R поток завершен");
-                }
-                catch (InterruptedException e)
-                {
-                    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
-                }
+               // try
+               // {
+                    //IO_Tread.join();
+                   // Log.d(LogPrefix, "IO поток завершен");
+                    //R_Thread.join();
+                    //Log.d(LogPrefix, "R поток завершен");
+               // }
+                //catch (InterruptedException e)
+                //{
+                //    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
+                //}
 
                 socket.close();
                 Log.d(LogPrefix,"Закрыли сокет в OnPause");
@@ -556,7 +697,17 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
-            Log.d(LogPrefix,"Вызвано принудительное завершение, конец IO потока");
+            Log.d(LogPrefix,"Вызвано принудительное завершение IO");
+            try
+            {
+                Log.d(LogPrefix, "<IO> Заснули на 5 сек");
+                sleep(2000);
+            }
+            catch (InterruptedException e1)
+            {
+                Log.d(LogPrefix, " Ошибка в засыпании потока IO" + e1.getMessage());
+            }
+            Log.d(LogPrefix,"<IO> Конец IO потока");
 
         }
 
@@ -569,6 +720,14 @@ public class MainActivity extends AppCompatActivity {
             {
                 OutStr.write(message);
                 Log.d(LogPrefix, " Данные "+_message+" отправлены");
+                try
+                {
+                    sleep(50);
+                }
+                catch (InterruptedException e)
+                {
+                    e.printStackTrace();
+                }
             }
             catch (IOException e)
             {
@@ -613,9 +772,18 @@ public class MainActivity extends AppCompatActivity {
 
         public void run()
         {
-            while ((QuitLevel != 5) && (!ThreadQuit))
+            while (!ThreadQuit)
             {
-                Bluetooth_send("2");
+                try
+                {
+                    access.acquire();
+                    Bluetooth_send("2");
+                    access.release();
+                }
+                catch (InterruptedException e)
+                {
+                    Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+                }
                 try
                 {
                     Log.d(LogPrefix, " Заснули на 5 сек");
@@ -624,13 +792,19 @@ public class MainActivity extends AppCompatActivity {
                 catch (InterruptedException e1)
                 {
                     Log.d(LogPrefix, " Ошибка в засыпании потока опроса" + e1.getMessage());
-                    QuitLevel++;
                 }
             }
-            if (QuitLevel == 5)
-                Log.d(LogPrefix, "Превышено количество неудачных опросов температуры, конец потока");
-            else
-                Log.d(LogPrefix, "Вызвано принудительное завершение, конец R потока");
+            Log.d(LogPrefix,"<R> Вызвано принудительное завершение");
+            try
+            {
+                Log.d(LogPrefix, "<R> Заснули на 5 сек");
+                sleep(2000);
+            }
+            catch (InterruptedException e1)
+            {
+                Log.d(LogPrefix, " Ошибка в засыпании потока R" + e1.getMessage());
+            }
+            Log.d(LogPrefix,"Конец R потока");
 
         }
 
@@ -706,6 +880,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
+            Log.d(LogPrefix,"<CheckThread> Конец потока");
         }
     }
     //----------------------------------------------------/Новый поток Check------------------------------------------------------
