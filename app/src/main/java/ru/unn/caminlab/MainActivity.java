@@ -90,8 +90,8 @@ public class MainActivity extends AppCompatActivity {
     public char degree = 176;
 
     final String LogPrefix = "****CaminLab**** ";
-      private static String MacAdress = "20:16:01:06:43:24";        // Arduino
-      //private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
+      //private static String MacAdress = "20:16:01:06:43:24";        // Arduino
+      private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
       private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     //-----------------------------------------------------------------------------------------------------
@@ -179,8 +179,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v)
             {
-                Intent Graph = new Intent(MainActivity.this, GraphicsActivity.class);
-                startActivityForResult(Graph, 666);
+                LineGraph line = new LineGraph();
+                Intent lineIntent = line.getIntent(MainActivity.this);
+                startActivity(lineIntent);
             }
         });
 
@@ -628,21 +629,28 @@ public class MainActivity extends AppCompatActivity {
             {
                 ThreadQuit = true;
                 Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R");
-               // try
-               // {
-                    //IO_Tread.join();
-                   // Log.d(LogPrefix, "IO поток завершен");
-                    //R_Thread.join();
-                    //Log.d(LogPrefix, "R поток завершен");
-               // }
-                //catch (InterruptedException e)
-                //{
-                //    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
-                //}
+                try
+                {
+                    socket.close();
+                    Log.d(LogPrefix,"Закрыли сокет в OnPause");
+                    socket = null;
 
-                socket.close();
-                Log.d(LogPrefix,"Закрыли сокет в OnPause");
-                socket = null;
+                    if(IO_Tread != null)
+                    {
+                        IO_Tread.join();
+                        Log.d(LogPrefix, "IO поток завершен");
+                    }
+                    if(R_Thread != null)
+                    {
+                        R_Thread.join();
+                        Log.d(LogPrefix, "R поток завершен");
+                    }
+                }
+                catch (InterruptedException e)
+                {
+                    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
+                }
+
             }
             catch (IOException e2)
             {
@@ -698,15 +706,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             Log.d(LogPrefix,"Вызвано принудительное завершение IO");
-            try
-            {
-                Log.d(LogPrefix, "<IO> Заснули на 5 сек");
-                sleep(2000);
-            }
-            catch (InterruptedException e1)
-            {
-                Log.d(LogPrefix, " Ошибка в засыпании потока IO" + e1.getMessage());
-            }
             Log.d(LogPrefix,"<IO> Конец IO потока");
 
         }
@@ -795,16 +794,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             Log.d(LogPrefix,"<R> Вызвано принудительное завершение");
-            try
-            {
-                Log.d(LogPrefix, "<R> Заснули на 5 сек");
-                sleep(2000);
-            }
-            catch (InterruptedException e1)
-            {
-                Log.d(LogPrefix, " Ошибка в засыпании потока R" + e1.getMessage());
-            }
-            Log.d(LogPrefix,"Конец R потока");
+            Log.d(LogPrefix,"<R> Конец R потока");
 
         }
 
