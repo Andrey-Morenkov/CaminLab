@@ -263,12 +263,14 @@ public class MainActivity extends AppCompatActivity {
             {
                 try
                 {
-                    access.acquire();
                     Log.d(LogPrefix, "CurrTemp = "+currTemp);
+
+                    access.acquire();
                     IO_Tread.Bluetooth_send("6");
                     IO_Tread.Bluetooth_send(currTemp);
-                    Log.d(LogPrefix, "Отправил CurrTemp");
                     access.release();
+
+                    Log.d(LogPrefix, "Отправил CurrTemp");
                 }
                 catch (InterruptedException e)
                 {
@@ -286,14 +288,14 @@ public class MainActivity extends AppCompatActivity {
                 String mins  = set_time.getText().toString().substring(3,5);
                 Log.d(LogPrefix,"<SetTimer> Target Mins = "+mins);
                 if(hours.charAt(0)=='0')
-                    hours = Character.toString(set_time.getText().toString().charAt(1));
+                    hours = Character.toString(set_time.getText().toString().charAt(1));               // проверка на время 08:**
                 if(mins.charAt(0)=='0')
-                    mins  = Character.toString(set_time.getText().toString().charAt(4));
+                    mins  = Character.toString(set_time.getText().toString().charAt(4));               // проверка на время **:03
 
                 Log.d(LogPrefix,"<SetTimer> Target Correct hours = "+hours);
                 Log.d(LogPrefix,"<SetTimer> Target Correct mins = " +mins);
-                int seconds = Integer.parseInt(hours)*3600 + Integer.parseInt(mins)*60;
-                Log.d(LogPrefix,"<SetTimer> Target All-to-secs = " +seconds);
+                int minutes = Integer.parseInt(hours)*60 + Integer.parseInt(mins);
+                Log.d(LogPrefix,"<SetTimer> Target All-to-mins = " +minutes);
 
                 Calendar c = Calendar.getInstance();
                 int currH = c.getTime().getHours();
@@ -302,26 +304,25 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(LogPrefix,"<SetTimer> Curr hours = "+currH);
                 Log.d(LogPrefix,"<SetTimer> Curr mins = " +currM);
 
-                int currseconds = currH*3600 + currM*60;
-                Log.d(LogPrefix,"<SetTimer> Curr All-to-secs = " +currseconds);
+                int currminutes = currH*60 + currM;
+                Log.d(LogPrefix,"<SetTimer> Curr All-to-mins = " +currminutes);
 
-                int deltasec = seconds - currseconds;
-                Log.d(LogPrefix,"<SetTimer> delta seconds = "+deltasec);
+                int deltamin = minutes - currminutes;
+                Log.d(LogPrefix,"<SetTimer> delta minutes = "+deltamin);
 
-                if(deltasec < 0)
+                if(deltamin < 0)
                 {
-                    deltasec = 24*3600 + deltasec;
-                    Log.d(LogPrefix,"<SetTimer> Correct delta seconds = "+deltasec);
+                    deltamin = 24*60 + deltamin;
+                    Log.d(LogPrefix,"<SetTimer> Correct delta minutes = "+deltamin);
                 }
 
-                if(seconds > 10)
+                if(deltamin > 10)
                 {
                     try
                     {
                         access.acquire();
                         IO_Tread.Bluetooth_send("3");
-                        IO_Tread.Bluetooth_send(String.valueOf(deltasec/256));
-                        IO_Tread.Bluetooth_send(String.valueOf(deltasec%256));
+                        IO_Tread.Bluetooth_send(String.valueOf(deltamin));
                         access.release();
                     }
                     catch (InterruptedException e)
@@ -331,7 +332,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 else                                                                                    // МЕГАКОСТЫЛЬ ВСЕХ ВРЕМЕН И НАРОДОВ
-                    Log.d(LogPrefix,"<SetTimer> Таймер работает со временем больше 10 сек");
+                    Log.d(LogPrefix,"<SetTimer> Таймер работает со временем больше 10 мин");
 
 
             }
@@ -424,21 +425,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(LogPrefix, "Создаю поток опроса устройства");
                     Ch_Thread = new CheckThread(socket);
                     Ch_Thread.start();
-                    /*try
-                    {
-                        Log.d(LogPrefix,"Ошибка "+e.getMessage());
-
-                        Log.d(LogPrefix,"Не смогли соединиться, пытаюсь закрыть сокет");
-                        socket.close();
-                        Log.d(LogPrefix,"Сокет закрыт");
-                        socket = null;
-                    }
-                    catch (IOException e2)
-                    {
-                        Log.d(LogPrefix,"Ошибка закрытия сокета " +e2.getMessage());
-                    }*/
                 }
-
 
                 if (IsConnect)
                 {
@@ -466,6 +453,50 @@ public class MainActivity extends AppCompatActivity {
     public void onStop() {
         super.onStop();
         Log.d(LogPrefix, "<<< On Stop >>>");
+
+        if (socket != null)
+        {
+            Log.d(LogPrefix,"Сокет был создан, попробую закрыть в OnStop");
+            try
+            {
+                ThreadQuit = true;
+                Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R / Ch");
+                try
+                {
+                    socket.close();
+                    Log.d(LogPrefix,"Закрыли сокет в OnStop");
+                    socket = null;
+
+                    if(IO_Tread != null)
+                    {
+                        IO_Tread.join();
+                        Log.d(LogPrefix, "IO поток завершен");
+                    }
+                    if(R_Thread != null)
+                    {
+                        R_Thread.join();
+                        Log.d(LogPrefix, "R поток завершен");
+                    }
+                    if(Ch_Thread != null)
+                    {
+                        Ch_Thread.join();
+                        Log.d(LogPrefix, "Ch поток завершен");
+                    }
+                }
+                catch (InterruptedException e)
+                {
+                    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
+                }
+
+            }
+            catch (IOException e2)
+            {
+                Log.d(LogPrefix,"Сокет не закрыт в OnPause " + e2.getMessage());
+            }
+        }
+        else
+            Log.d(LogPrefix,"Сокет не был создан, закрывать в OnPause нечего");
+
     }
 
     @Override
@@ -556,109 +587,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
-   /* public boolean IsTemp = false;
-    public boolean IsCommand = false;
-    public boolean IsStatus = false;
-
-    public void CommandParcer(String ArduinoData)
-    {
-        switch (ArduinoData.charAt(0))
-        {
-            case 't':
-            {
-                Log.d(LogPrefix, "<CommandParcer> Пришла температура от Arduino");
-                IsTemp=true;
-                break;
-            }
-            case 'c':
-            {
-                Log.d(LogPrefix, "<CommandParcer> Пришла команда от Arduino");
-                IsCommand = true;
-                break;
-            }
-            case 's':
-            {
-
-                Log.d(LogPrefix, "<CommandParcer> Пришел статус от Arduino");
-                IsStatus = true;
-                break;
-            }
-            default:
-            {
-                if(IsTemp)
-                {
-                    Log.d(LogPrefix, "<CommandParcer> Температура: "+ArduinoData);
-                    temp_screen.setText(ArduinoData + " " + degree + "C");
-                    IsTemp=false;
-                }
-                if(IsCommand)
-                {
-                    Log.d(LogPrefix, "<CommandParcer> Команда: "+ArduinoData);
-                    IsCommand=false;
-                }
-                if(IsStatus)
-                {
-                    Log.d(LogPrefix, "<CommandParcer> Статус: "+ArduinoData);
-                    if(ArduinoData.charAt(0) == '0')
-                    {
-                        Log.d(LogPrefix, "<CommandParcer> Камин выключен");
-                        check_cam_status.setChecked(false);
-                    }
-                    if(ArduinoData.charAt(0) == '1')
-                    {
-                        Log.d(LogPrefix, "<CommandParcer> Камин включен");
-                        check_cam_status.setChecked(true);
-                    }
-                    IsStatus=false;
-                }
-                    //Log.d(LogPrefix,"<CommandParcer> Неизвестные данные:" + ArduinoData);
-            }
-        }
-    }
-    */
     @Override
     public void onPause()
     {
         super.onPause();
-        Log.d(LogPrefix, "<<< On Pause >>>");
-        if (socket != null)
-        {
-            Log.d(LogPrefix,"Сокет был создан, попробую закрыть в OnPause");
-            try
-            {
-                ThreadQuit = true;
-                Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R");
-                try
-                {
-                    socket.close();
-                    Log.d(LogPrefix,"Закрыли сокет в OnPause");
-                    socket = null;
-
-                    if(IO_Tread != null)
-                    {
-                        IO_Tread.join();
-                        Log.d(LogPrefix, "IO поток завершен");
-                    }
-                    if(R_Thread != null)
-                    {
-                        R_Thread.join();
-                        Log.d(LogPrefix, "R поток завершен");
-                    }
-                }
-                catch (InterruptedException e)
-                {
-                    Log.d(LogPrefix, "Не удалось закрыть поток IO / R "+e.getMessage());
-                }
-
-            }
-            catch (IOException e2)
-            {
-                Log.d(LogPrefix,"Сокет не закрыт в OnPause " + e2.getMessage());
-            }
-        }
-        else
-            Log.d(LogPrefix,"Сокет не был создан, закрывать в OnPause нечего");
+        Log.d(LogPrefix,"<<< On Pause >>>");
 
     }
 
@@ -678,11 +611,11 @@ public class MainActivity extends AppCompatActivity {
             {
                 OutStr = thread_socket.getOutputStream();
                 InStr = thread_socket.getInputStream();
-                Log.d(LogPrefix,"Выделили IO потоки");
+                Log.d(LogPrefix,"<IO> Выделили IO потоки");
             }
             catch (IOException e)
             {
-                Log.d(LogPrefix,"Ошибка выделения IO потоков "+e.getMessage());
+                Log.d(LogPrefix,"<IO> Ошибка выделения IO потоков "+e.getMessage());
             }
         }
 
@@ -701,11 +634,11 @@ public class MainActivity extends AppCompatActivity {
                 }
                 catch (IOException e)
                 {
-                    Log.d(LogPrefix,"Ошибка "+e.getMessage());
+                    Log.d(LogPrefix,"<IO> Ошибка "+e.getMessage());
                     break;
                 }
             }
-            Log.d(LogPrefix,"Вызвано принудительное завершение IO");
+            Log.d(LogPrefix,"<IO> Вызвано принудительное завершение IO");
             Log.d(LogPrefix,"<IO> Конец IO потока");
 
         }
@@ -714,11 +647,11 @@ public class MainActivity extends AppCompatActivity {
         {
             byte[] message = _message.getBytes();
 
-            Log.d(LogPrefix, "Пытаюсь отправить данные "+ _message +" по Bluetooth");
+            Log.d(LogPrefix, "<IO> Пытаюсь отправить данные "+ _message +" по Bluetooth");
             try
             {
                 OutStr.write(message);
-                Log.d(LogPrefix, " Данные "+_message+" отправлены");
+                Log.d(LogPrefix, "<IO> Данные "+_message+" отправлены");
                 try
                 {
                     sleep(50);
@@ -730,21 +663,9 @@ public class MainActivity extends AppCompatActivity {
             }
             catch (IOException e)
             {
-                Log.d(LogPrefix, " Ошибка отправки данных "+ e.getMessage());
+                Log.d(LogPrefix, "<IO> Ошибка отправки данных "+ e.getMessage());
             }
         }
-
-        /*public Object status_OutStr()
-        {
-            if (OutStr == null)
-            {
-                return null;
-            }
-            else
-            {
-                return OutStr;
-            }
-        }*/
     }
     //----------------------------------------------------/Новый поток IO------------------------------------------------------
 
@@ -753,7 +674,6 @@ public class MainActivity extends AppCompatActivity {
     {
         private BluetoothSocket thread_socket = null;
         private OutputStream OutStr = null;
-        private int QuitLevel = 0;
 
         public RequestThread(BluetoothSocket _socket)
         {
@@ -761,11 +681,11 @@ public class MainActivity extends AppCompatActivity {
             try
             {
                 OutStr = thread_socket.getOutputStream();
-                Log.d(LogPrefix, " Выделили Request поток");
+                Log.d(LogPrefix, "<R> Выделили Request поток");
             }
             catch (IOException e)
             {
-                Log.d(LogPrefix, " Ошибка выделения Request потока "+e.getMessage());
+                Log.d(LogPrefix, "<R> Ошибка выделения Request потока "+e.getMessage());
             }
         }
 
@@ -781,24 +701,24 @@ public class MainActivity extends AppCompatActivity {
                 }
                 catch (InterruptedException e)
                 {
-                    Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
+                    Log.d(LogPrefix, "<R> Не могу зайти в крит секцию, жду");
                 }
                 try
                 {
-                    Log.d(LogPrefix, " Заснули на 5 сек");
+                    Log.d(LogPrefix, "<R> Заснули на 5 сек");
                     sleep(5000);
                 }
                 catch (InterruptedException e1)
                 {
-                    Log.d(LogPrefix, " Ошибка в засыпании потока опроса" + e1.getMessage());
+                    Log.d(LogPrefix, "<R> Ошибка в засыпании потока опроса" + e1.getMessage());
                 }
             }
-            Log.d(LogPrefix,"<R> Вызвано принудительное завершение");
+            Log.d(LogPrefix,"<R> Вызвано принудительное завершение R");
             Log.d(LogPrefix,"<R> Конец R потока");
 
         }
 
-        public synchronized void Bluetooth_send(String _message)                                         // можно сделать с семафорами
+        public synchronized void Bluetooth_send(String _message)
         {
             byte[] message = _message.getBytes();
 
