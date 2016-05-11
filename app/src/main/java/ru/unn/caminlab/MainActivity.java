@@ -37,6 +37,7 @@ import java.net.Socket;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+
 import android.os.Handler;
 
 import org.achartengine.ChartFactory;
@@ -70,28 +71,42 @@ public class MainActivity extends AppCompatActivity {
     private String        Timer = null;
     public  ImageView     online;
     public  Semaphore     access;
+    public  Semaphore     CanGetData;
     public  Button        graphics;
 
 
 
     public final int ArduinoMessage = 666;
     public final int CaminOn = 111;
+    public final int Statistic = 777;
 
     private Handler h;
     private Handler ch;
+    private Handler stat;
 
 
     private static final int REQUEST_ENABLE_BT = 0;
     private boolean Is_Bluetooth_Enabled = false;
     private boolean ThreadQuit = false;
     private boolean isOn = false;
+    private boolean IsStatLoaded = false;
 
     public boolean IsConnect = false;
-    public char degree = 176;
+    public char    degree = 176;
+    public double[]  statarr;
+    public double[]  timearr;
+
+    public static final String OnOffConst = "1";
+    public static final String TargetConst = "6";
+    public static final String TimerConst = "8";
+    public static final String StatusConst = "5";
+    public static final String TempConst = "2";
+    public static final String StaticConst = "9";
+
 
     final String LogPrefix = "****CaminLab**** ";
-      //private static String MacAdress = "20:16:01:06:43:24";        // Arduino
-      private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
+      private static String MacAdress = "20:16:01:06:43:24";        // Arduino
+      //private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
       private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     //-----------------------------------------------------------------------------------------------------
@@ -121,6 +136,7 @@ public class MainActivity extends AppCompatActivity {
         set_time_button = (Button) findViewById(R.id.Set_Time);
         graphics = (Button) findViewById(R.id.graphics);
         access = new Semaphore(1);
+        CanGetData = new Semaphore(1); // мб пригодится
 
         if (!bluetooth_adapter.isEnabled())
         {
@@ -152,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
                     try
                     {
                         access.acquire();
-                        IO_Tread.Bluetooth_send("1");
+                        IO_Tread.Bluetooth_send(OnOffConst);
                         access.release();
                     }
                     catch (InterruptedException e)
@@ -160,8 +176,8 @@ public class MainActivity extends AppCompatActivity {
                         Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
                     }
 
-                    Log.d(LogPrefix, "Отправлены данные : 1");
-                    Log.d(LogPrefix, "Проверяем статус камина");
+                    Log.d(LogPrefix, "<BTN> Отправлены данные : 1");
+                    Log.d(LogPrefix, "<BTN> Проверяем статус камина");
                     CheckStatus();
                 }
                 else
@@ -179,6 +195,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v)
             {
+                Log.d(LogPrefix,"Запрашиваем статистику");
+                Log.d(LogPrefix,"Статистика получена");
                 LineGraph line = new LineGraph();
                 Intent lineIntent = line.getIntent(MainActivity.this);
                 startActivity(lineIntent);
@@ -266,7 +284,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(LogPrefix, "CurrTemp = "+currTemp);
 
                     access.acquire();
-                    IO_Tread.Bluetooth_send("6");
+                    IO_Tread.Bluetooth_send(TargetConst);
                     IO_Tread.Bluetooth_send(currTemp);
                     access.release();
 
@@ -312,16 +330,13 @@ public class MainActivity extends AppCompatActivity {
 
                 if(deltamin < 0)
                 {
-                    deltamin = 24*60 + deltamin;
-                    Log.d(LogPrefix,"<SetTimer> Correct delta minutes = "+deltamin);
+                    deltamin = 24 * 60 + deltamin;
+                    Log.d(LogPrefix, "<SetTimer> Correct delta minutes = " + deltamin);
                 }
-
-                if(deltamin > 10)
-                {
                     try
                     {
                         access.acquire();
-                        IO_Tread.Bluetooth_send("3");
+                        IO_Tread.Bluetooth_send(TimerConst);
                         IO_Tread.Bluetooth_send(String.valueOf(deltamin));
                         access.release();
                     }
@@ -329,12 +344,6 @@ public class MainActivity extends AppCompatActivity {
                     {
                         Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
                     }
-                }
-
-                else                                                                                    // МЕГАКОСТЫЛЬ ВСЕХ ВРЕМЕН И НАРОДОВ
-                    Log.d(LogPrefix,"<SetTimer> Таймер работает со временем больше 10 мин");
-
-
             }
         });
 
@@ -347,7 +356,7 @@ public class MainActivity extends AppCompatActivity {
                 switch (msg.what)
                 {
                     case ArduinoMessage:
-                        Log.d(LogPrefix, "$$$$ Пришедшая строка от Ардуино $$$$ -->"+ msg.obj.toString());
+                        Log.d(LogPrefix, "$$$$ Пришедшая строка от Ардуино $$$$ --> "+ msg.obj.toString());
                         CommandParcer(msg.obj.toString());
                         break;
                 }
@@ -375,7 +384,6 @@ public class MainActivity extends AppCompatActivity {
         Log.d(LogPrefix, "<<< On Resume >>>");
 
         ThreadQuit = false;
-        //online.setImageResource(android.R.drawable.presence_offline);
         online.setImageResource(android.R.drawable.presence_offline);
 
         if (Is_Bluetooth_Enabled)
@@ -422,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
                 catch (IOException e)
                 {
                     Log.d(LogPrefix, "Ошибка " + e.getMessage());
-                    Log.d(LogPrefix, "Создаю поток опроса устройства");
+                    Log.d(LogPrefix, "Запускаю поток опроса устройства");
                     Ch_Thread = new CheckThread(socket);
                     Ch_Thread.start();
                 }
@@ -460,13 +468,15 @@ public class MainActivity extends AppCompatActivity {
             try
             {
                 ThreadQuit = true;
-                Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R / Ch");
+                Log.d(LogPrefix, "Пытаюсь закрыть потоки IO / R / Ch / St");
                 try
                 {
-                    socket.close();
-                    Log.d(LogPrefix,"Закрыли сокет в OnStop");
-                    socket = null;
-
+                    if(2==2)
+                    {
+                        socket.close();
+                        Log.d(LogPrefix,"Закрыли сокет в OnStop");
+                        socket = null;
+                    }
                     if(IO_Tread != null)
                     {
                         IO_Tread.join();
@@ -481,6 +491,10 @@ public class MainActivity extends AppCompatActivity {
                     {
                         Ch_Thread.join();
                         Log.d(LogPrefix, "Ch поток завершен");
+                    }
+                    else
+                    {
+                        Log.d(LogPrefix, "Ch поток уже был завершен");
                     }
                 }
                 catch (InterruptedException e)
@@ -511,8 +525,6 @@ public class MainActivity extends AppCompatActivity {
         Log.d(LogPrefix, "<<< On Destroy >>>");
     }
 
-
-
     public void CheckStatus()
     {
         try
@@ -520,20 +532,13 @@ public class MainActivity extends AppCompatActivity {
             access.acquire();
             IO_Tread.Bluetooth_send("5"); // статус камина
             access.release();
+            Log.d(LogPrefix,"Статус отправлен");
         }
         catch (InterruptedException e)
         {
             Log.d(LogPrefix, "Не могу зайти в крит секцию, жду");
         }
-
     }
-
-
-
-    /*public String GetTime()
-    {
-        return (DateFormat.getTimeInstance().format(Calendar.getInstance().getTime()) + " : ");
-    }*/
 
     public void CommandParcer(String ArduinoData)
     {
@@ -554,17 +559,17 @@ public class MainActivity extends AppCompatActivity {
             case 's':
             {
 
-                Log.d(LogPrefix, "<CommandParcer> Пришел статус от Arduino: "+ArduinoData.substring(1));
-                switch (ArduinoData.substring(1))
+                Log.d(LogPrefix, "<CommandParcer> Пришел статус от Arduino: "+ArduinoData.charAt(1));
+                switch (ArduinoData.charAt(1))
                 {
-                    case "0":
+                    case '0':
                     {
                         Log.d(LogPrefix, "<CommandParcer> Камин выключен");
                         check_cam_status.setChecked(false);
                         on_button.setText("Включить");
                         break;
                     }
-                    case "1":
+                    case '1':
                     {
                         Log.d(LogPrefix, "<CommandParcer> Камин включен");
                         check_cam_status.setChecked(true);
@@ -696,7 +701,7 @@ public class MainActivity extends AppCompatActivity {
                 try
                 {
                     access.acquire();
-                    Bluetooth_send("2");
+                    Bluetooth_send(TempConst);
                     access.release();
                 }
                 catch (InterruptedException e)
@@ -751,7 +756,7 @@ public class MainActivity extends AppCompatActivity {
 
         public void run()
         {
-            while(!IsConnect)
+            while((!IsConnect))
             {
                 try
                 {
@@ -794,7 +799,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     //----------------------------------------------------/Новый поток Check------------------------------------------------------
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
