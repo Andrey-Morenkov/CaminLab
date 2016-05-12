@@ -1,0 +1,293 @@
+#include <math.h>
+
+int Relay = 4;
+int incomingByte;
+
+int Status = 0;
+int& Ref_status = Status;
+
+float Temp;
+char str[8];
+int tmp1;
+int tmp2;
+float stat[96];
+int Last_stat = 0;
+int& Ref_Last_stat = Last_stat;
+float Target_temp;
+
+long This_time = 0;
+long& Ref_This_time = This_time;
+
+
+int event = 0;
+int& Ref_event = event;
+int Time_event = 0;
+int& Ref_Time_event = Time_event;
+long Start_time = 0;
+long& Ref_Start_time = Start_time;
+
+String cmd = String(5);
+String data = String(5);
+String message = String(16);
+
+
+int Time_for(long& Ref_Time_for) //ќтсчитывает по минуте
+{
+  if ((millis() - Ref_Time_for) > 60000) 
+  {
+     Ref_Time_for = millis();
+     return 1;
+  }
+  else 
+  {
+    return 0;
+  }
+} 
+
+int Time_is(long& Ref_This_time) //измер€ет по 15 минут
+{
+  if ((millis() - Ref_This_time) > 900000) 
+  {
+     Ref_This_time = millis();
+     return 1;
+  }
+  else 
+  {
+    return 0;
+  }
+}
+
+void Prepare_to_save(void)
+{
+  for (int i = 0;i<96;i++)
+  stat[i]=200;
+}
+
+void Save_Stat(int& Ref_Last_stat)
+{
+
+    stat[Ref_Last_stat] = Temp;
+    Ref_Last_stat++;                       
+    if(Ref_Last_stat == 97) Ref_Last_stat = 0;
+}
+
+int readInt(void)
+{
+        int i = 0;
+        while (!(Serial.available() > 0))
+        {
+          delay(100);
+        }
+        i = Serial.parseInt();
+        return i;
+}
+
+float readFloat(void)
+{
+        float i = 0;
+        while (!(Serial.available() > 0))
+        {
+          delay(100);
+        }
+        i = Serial.parseFloat();
+        return i;
+}
+
+void Get_Data(int command)
+{
+        int i = 0;
+        while ((!(Serial.available() > 0))&&(i != command))
+        {
+          delay(100);
+        }
+        i = readInt();
+}
+
+void Get_stat(int& Ref_Last_stat)
+{
+  int This_stat = Ref_Last_stat; //чтобы не изменить внешний счетчик
+  for (int i = This_stat; i > 1; --i)
+  {
+    Get_Data(9);
+    cmd = "l";
+    data = (String)stat[i];
+    message = cmd + data;
+    Serial.print("-");
+    Serial.println(message);
+  }
+  for (int i = 96; i > This_stat; --i)
+  {
+    Get_Data(9);
+    cmd = "l";
+    data = (String)stat[i];
+    message = cmd + data;
+    Serial.print("-");
+    Serial.println(message);
+  }
+}
+
+void Time_to_do (int& Ref_Time_event, int& Ref_event, long& Ref_Start_time, float Target_temp, float Temp, int& Ref_status)
+{
+  if (Ref_event) 
+  {
+
+    if (Ref_Time_event <= 0) // минуты до включени€
+    {
+          if (!Ref_status) 
+          {
+            digitalWrite(Relay, LOW);
+            Ref_status = 1;
+            delay(1000);
+
+          }
+
+          if (Temp > Target_temp) 
+          {
+            Ref_event = 0;
+            if (Ref_status) 
+          {
+            digitalWrite(Relay, HIGH);
+            Ref_status = 0;
+            delay(1000);
+
+          }
+          }
+    }
+    else
+    {
+      Ref_Time_event -= Time_for(Ref_Start_time);
+    }
+  }
+}
+
+
+
+void test_stat(void)
+{
+  for (int i = 0; i <96; ++i)
+  stat[i] = i;
+}
+
+float Getterm(void) 
+{
+double Vin = 5.0; // напр€жение питани€
+double voltage = Vin + 0.2 - analogRead(4) * Vin / 1023.0;
+double r1 = voltage * 10000.0 / (Vin - voltage); // 10 кќм - подт€гивающий резистор
+double B = 4300.0; // ѕараметр термистора (из datasheet)
+double temperature = 1.0/( 1.0/(B)*log(r1/10000.0)+1.0/(273.0+25.0) ) - 273.0; // 10KOm - R_25
+return (float)temperature;
+}
+
+void fake_stat(void)
+{
+  for (int i = 0; i <96; ++i)
+  stat[i] = (float)(((float)random(150,300))/10);
+}
+
+
+void setup()
+{
+
+   
+   Serial.begin(9600);
+   pinMode(Relay, OUTPUT);
+   digitalWrite(Relay, HIGH);
+   str[4] = '5';
+   str[3] = '4';
+   str[2] = '3';
+   str[1] = '2';
+   str[0] = '1';
+   Status = 0;
+   Prepare_to_save();
+   
+}
+
+void loop() 
+{
+
+Time_to_do (Ref_Time_event,Ref_event,Ref_Start_time,Target_temp,Temp,Ref_status);
+
+tmp1 = random(-100,101);
+tmp2 = random(1,15);
+//Temp = tmp1/tmp2;
+Temp = Getterm();
+delay(1000);
+
+Save_Stat(Ref_Last_stat);
+
+
+
+if (Serial.available() > 0) 
+        {
+        incomingByte = Serial.read();
+              
+        if (incomingByte == 49) //1 вкл\откл
+        {
+          if (!Status) 
+          {
+            digitalWrite(Relay, LOW);
+            Status = 1;
+            delay(1000);
+          }
+          else
+          {
+            digitalWrite(Relay, HIGH);
+            Status = 0;
+            delay(1000);
+          }
+        }
+        
+        if (incomingByte == 50)  //2 температура
+        {
+          cmd = "t";
+          data = (String)Temp;
+          message = cmd + data;
+          Serial.print("-");
+          Serial.println(message);
+        }
+         
+
+         if (incomingByte == 51) //3
+        {
+
+        }
+
+        if (incomingByte == 54)  //6 целева€ температура
+        {
+           Target_temp = readFloat();
+           Time_event = 0; //минуты до включени€ ,включаем пр€мо сейчас
+           event = 1;
+           Start_time = millis(); //во сколько прин€ли
+        }
+
+        if (incomingByte == 53)  //5 статус
+        {
+          cmd = "s";
+          data = (String)Status;
+          message = cmd + data;
+          Serial.print("-");
+          Serial.println(message);
+        }
+
+         if (incomingByte == 52)  //4 тест статистики 
+        {
+            test_stat();
+            Last_stat = 48;
+            Get_stat(Ref_Last_stat);
+        }
+
+        if (incomingByte == 55)  //7 планировщик
+        {
+           Target_temp = readFloat();
+           Time_event = readInt(); //минуты до включени€ 
+           event = 1;
+           Start_time = millis(); //во сколько прин€ли
+        }
+
+        if (incomingByte == 56)  //8 тест 
+        {
+          int i = readInt();
+          Serial.println(i);
+        }
+    }
+}

@@ -1,52 +1,33 @@
 package ru.unn.caminlab;
 
+import android.bluetooth.*;
+import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
-import android.net.Uri;
+import android.os.Handler;
 import android.os.Bundle;
 import android.os.Message;
-import android.support.annotation.Nullable;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.util.Log;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
-
-import android.bluetooth.*;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.CompoundButton;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.Switch;
-import android.widget.TextView;
-import android.app.Activity;
-import android.content.Intent;
-import android.util.Log;
-
-import java.text.DateFormat;
-import java.text.DecimalFormat;
 import java.util.Calendar;
-import java.util.Date;
+import java.text.DecimalFormat;
 import java.net.Socket;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import android.os.Handler;
 
-import org.achartengine.ChartFactory;
-import org.achartengine.chart.PieChart;
-import org.achartengine.model.CategorySeries;
-import org.achartengine.renderer.DefaultRenderer;
-import org.achartengine.renderer.SimpleSeriesRenderer;
-
-import ru.unn.caminlab.R;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -75,26 +56,18 @@ public class MainActivity extends AppCompatActivity {
     public  Button        graphics;
 
 
-
     public final int ArduinoMessage = 666;
     public final int CaminOn = 111;
-    public final int Statistic = 777;
 
     private Handler h;
     private Handler ch;
-    private Handler stat;
-
 
     private static final int REQUEST_ENABLE_BT = 0;
     private boolean Is_Bluetooth_Enabled = false;
     private boolean ThreadQuit = false;
-    private boolean isOn = false;
-    private boolean IsStatLoaded = false;
 
     public boolean IsConnect = false;
     public char    degree = 176;
-    public double[]  statarr;
-    public double[]  timearr;
 
     public static final String OnOffConst = "1";
     public static final String TargetConst = "6";
@@ -105,9 +78,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     final String LogPrefix = "****CaminLab**** ";
-      private static String MacAdress = "20:16:01:06:43:24";        // Arduino
-      //private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
-      private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static String MacAdress = "20:16:01:06:43:24";        // Arduino
+    //private static String MacAdress = "00:0B:0D:06:75:42";          // COMP
+    private static final UUID ID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     //-----------------------------------------------------------------------------------------------------
 
@@ -420,34 +393,9 @@ public class MainActivity extends AppCompatActivity {
 
                 Log.d(LogPrefix, "Попытка установки соединения");
 
-                try
-                {
-                    socket.connect();
-                    Log.d(LogPrefix, "Соединение установлено");
-                    online.setImageResource(android.R.drawable.presence_online);
-                    IsConnect = true;
-                }
-                catch (IOException e)
-                {
-                    Log.d(LogPrefix, "Ошибка " + e.getMessage());
-                    Log.d(LogPrefix, "Запускаю поток опроса устройства");
-                    Ch_Thread = new CheckThread(socket);
-                    Ch_Thread.start();
-                }
-
-                if (IsConnect)
-                {
-                    Log.d(LogPrefix,"Запускаю отдельный поток ввода-вывода");
-                    IO_Tread = new NewThread(socket);
-                    IO_Tread.start();
-
-                    Log.d(LogPrefix,"Запускаю отдельный поток опроса температуры");
-                    R_Thread = new RequestThread(socket);
-                    R_Thread.start();
-
-                    Log.d(LogPrefix,"Запрашиваем статус камина");
-                    CheckStatus();
-                }
+                Log.d(LogPrefix, "Запускаю поток опроса устройства");
+                Ch_Thread = new CheckThread(socket);
+                Ch_Thread.start();
             }
             else
             {
@@ -756,7 +704,7 @@ public class MainActivity extends AppCompatActivity {
 
         public void run()
         {
-            while((!IsConnect))
+            while((!IsConnect)&&(!ThreadQuit))
             {
                 try
                 {

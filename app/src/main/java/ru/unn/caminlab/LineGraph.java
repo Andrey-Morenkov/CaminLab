@@ -3,6 +3,7 @@ package ru.unn.caminlab;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.util.Log;
 
 import org.achartengine.ChartFactory;
 import org.achartengine.chart.PointStyle;
@@ -10,12 +11,15 @@ import org.achartengine.model.TimeSeries;
 import org.achartengine.model.XYMultipleSeriesDataset;
 import org.achartengine.renderer.XYMultipleSeriesRenderer;
 import org.achartengine.renderer.XYSeriesRenderer;
+
 import java.util.Random;
 import java.util.Calendar;
 
 
-public class LineGraph {
+public class LineGraph
+{
     public static final int StatCount = 95;
+    final String LogPrefix = "****CaminLab**** ";
 
     public Intent getIntent(Context context)
     {
@@ -28,47 +32,42 @@ public class LineGraph {
 
         Random rnd = new Random(System.currentTimeMillis());
 
-
-        for (int i = 0; i < 95; i++)
+        for (int i = 0; i < StatCount; i++)
         {
-            x[i] = 15 + (30 - 15) * rnd.nextDouble();
+            y[i] = 15 + (30 - 15) * rnd.nextDouble();
         }
 
         currM = currM / 15; // Чекпоинт
 
         int m = 0;
 
-        for(int i = currH; i > (currH-23)-1; i--)
+        while (currM >= 0)
         {
-            if (m <= 94)
+            x[m] = TimeBuilder(currH,currM);
+            m++;
+            currM--;
+        }
+         currH --;
+         currM = 3;
+
+        for (;m<StatCount;currH--)
+        {
+            for(;(currM >= 0)&&(m<StatCount);currM--)
             {
-                if(i==currH)
-                {
-                    for (int j = currM; j >= 0; j--)
-                    {
-                        y[m] = TimeBuilder(i,j);
-                        m++;
-                    }
-                }
-                else
-                {
-                    for (int j = 3; j >= 0; j--)
-                    {
-                        y[m] = TimeBuilder(i,j);
-                        m++;
-                    }
-                }
+                x[m] = TimeBuilder(currH,currM);
+                m++;
             }
+            currM = 3;
         }
 
+        //double x[] = {8.30, 9.00, 9.30, 10.00,10.30,11.00,11.30,12.00};
+        //double y[] = {20.5, 20.8, 21.5, 22.2, 23.1, 22.8, 22.1 ,20.5 };
 
-        //double x[] = {8.30, 9.00, 9.30, 10.00,10.30,11.00,11.30};
-        //double y[] = {20.5, 20.8, 21.5, 22.2, 23.1, 22.8, 22.1 };
-
-        TimeSeries series = new TimeSeries("Temp");              // разобраться с графиком
+        TimeSeries series = new TimeSeries("Temp");
         for (int i = 0; i < x.length; i++)
         {
             series.add(x[i], y[i]);
+            Log.d(LogPrefix, "Добавили точку "+x[i]+":"+y[i]);
         }
 
         XYMultipleSeriesDataset dataset = new XYMultipleSeriesDataset();
@@ -79,7 +78,7 @@ public class LineGraph {
         mRenderer.addSeriesRenderer(renderer);
 
 
-        renderer.setColor(Color.MAGENTA);
+        renderer.setColor(Color.CYAN);
         renderer.setAnnotationsTextSize(10);
         renderer.setPointStyle(PointStyle.CIRCLE);
         renderer.setFillPoints(true);
@@ -108,14 +107,13 @@ public class LineGraph {
 
     double TimeBuilder(int hours, int minmnoj)
     {
-        double tmp=0.0;
         double hours1 = (double)hours;
         double minmnoj1 = (double) minmnoj;
 
-        tmp = hours1 + (0.01*(minmnoj1*15));
+       double tmp = hours1 + (0.01*(minmnoj1*15));
         if(tmp < 0)
         {
-            tmp = (24+hours) + (0.1*(minmnoj*15));
+            tmp = (24+hours) + (0.01*(minmnoj*15));
         }
         return tmp;
     }
